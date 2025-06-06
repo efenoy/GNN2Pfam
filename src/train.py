@@ -1,108 +1,101 @@
 #%%
-
-import numpy as np
-
-## Model import
-from model import GNNModel
-
-## Utils
-from utils import train_one_epoch
-
-## Progress bar
-from tqdm import tqdm
-
-# PyTorch
+## Standard libraries
+import os
+import numpy as np 
 import torch
-import torch.nn as nn
-import torch.optim as optim
+
+# PyTorch Lightning
+import pytorch_lightning as pl
+from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
+
+# Path to the folder where the datasets are/should be downloaded
+DATASET_PATH = "/usr/users/efenoy/data/GraphData/Dicts/CONS/"
+# Path to the folder where the pretrained models are saved
+CHECKPOINT_PATH = "/usr/users/efenoy/data/GraphData/saved_models/"
+
+# Setting the seed
+pl.seed_everything(42)
+
+# import torch geometric
 import torch_geometric.data as geom_data
 
-# PyTorch TensorBoard support
-from torch.utils.tensorboard import SummaryWriter
-from datetime import datetime
-
-# Path to the folder where the datasets are/should be downloaded (e.g. CIFAR10)
-DATASET_PATH = "../data"
-# Path to the folder where the pretrained models are saved
-CHECKPOINT_PATH = "../saved_models/"
-
-# # Ensure that all operations are deterministic on GPU (if used) for reproducibility
-# torch.backends.cudnn.deterministic = True
-# torch.backends.cudnn.benchmark = False
+# Ensure that all operations are deterministic on GPU (if used) for reproducibility
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
 
 device = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
+# device = torch.device("cpu")
+
+#import model
+from model import NodeLevelGNN
+
+import warnings
+
+warnings.filterwarnings("ignore")
+
 print(device)
 
-trainData=np.load("../data/train.npy", allow_pickle=True).item()
-devData=np.load("../data/dev.npy", allow_pickle=True).item()
-testData=np.load("../data/test.npy", allow_pickle=True).item()
+trainData=np.load(f"{DATASET_PATH}/train.npy", allow_pickle=True).item()
+devData=np.load(f"{DATASET_PATH}/dev.npy", allow_pickle=True).item()
+testData=np.load(f"{DATASET_PATH}/test.npy", allow_pickle=True).item()
 
 graph_train_loader = geom_data.DataLoader(list(trainData.values()), batch_size=1, shuffle=True)
-graph_val_loader = geom_data.DataLoader(list(devData.values()), batch_size=1)
+graph_val_loader = geom_data.DataLoader(list(devData.values()), batch_size=1) # Additional loader if you want to change to a larger dataset
+graph_test_loader = geom_data.DataLoader(list(testData.values()), batch_size=1)
 
 #%%
 
-EPOCHS = 500
-epoch_number = 0
-Patience = 10
-count = 0
-lr=1e-6
+def train_node_classifier(model_name, **model_kwargs):
+    pl.seed_everything(42)
 
-model = GNNModel(c_in=640, c_hidden=16, c_out=58, num_layers=16).to(device)
-loss_fn = nn.BCELoss()
-optimizer =  optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=0)
+    # Create a PyTorch Lightning trainer with the generation callback
+    root_dir = os.path.join(CHECKPOINT_PATH, "CONS_NodeLevel_" + model_name)
+    os.makedirs(root_dir, exist_ok=True)
+    trainer = pl.Trainer(default_root_dir=root_dir,
+                         callbacks=[ModelCheckpoint(save_weights_only=True, mode="max", monitor="val_f1")],
+                         accelerator="gpu" if str(device).startswith("cuda") else "cpu",
+                         devices=1,
+                         max_epochs=200,
+                         enable_progress_bar=True) # False because epoch size is 1
+    trainer.logger._default_hp_metric = None # Optional logging argument that we don't need
 
-timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-writer = SummaryWriter(f'{CHECKPOINT_PATH}/Trainer_{timestamp}')
-
-best_vloss = 1_000_000.
-
-for epoch in tqdm(range(EPOCHS)):
-    print('EPOCH {} (count {}):'.format(epoch_number + 1, count))
-
-    # Make sure gradient tracking is on, and do a pass over the data
-    model.train(True)
-    avg_loss = train_one_epoch(epoch_number, writer, model, graph_train_loader, optimizer, loss_fn, device)
-
-    running_vloss = 0.0
-    # Set the model to evaluation mode, disabling dropout and using population
-    # statistics for batch normalization.
-    model.eval()
-
-    # Disable gradient computation and reduce memory consumption.
-    with torch.no_grad():
-        for i, vdata in enumerate(graph_val_loader):
-            vinputs, vedge_index, vbatch_idx = vdata.x.to(device), vdata.edge_index.to(device), vdata.batch.to(device)
-            voutputs = model(vinputs, vedge_index, vbatch_idx)
-            vpred = voutputs.squeeze(dim=-1)
-            vpred = (vpred > 0).float()      
-            vlabels = vdata.y.float().to(device)
-     
-        # Compute the loss and its gradients
-            vloss = loss_fn(vpred, vlabels)
-            running_vloss += vloss
-
-    avg_vloss = running_vloss / (i + 1)
-    print('LOSS train {} valid {}'.format(avg_loss, avg_vloss))
-
-    # Log the running loss averaged per batch
-    # for both training and validation
-    writer.add_scalars('Training vs. Validation Loss',
-                    { 'Training' : avg_loss, 'Validation' : avg_vloss },
-                    epoch_number + 1)
-    writer.flush()
-
-    # Track best performance, and save the model's state
-    if avg_vloss < best_vloss:
-        count=0
-        best_vloss = avg_vloss
-        model_path = f'{CHECKPOINT_PATH}/Trainer_{timestamp}/model_{epoch_number}'
-        torch.save(model.state_dict(), model_path)
+    # Check whether pretrained model exists. If yes, load it and skip training
+    pretrained_filename = os.path.join(CHECKPOINT_PATH, f"NodeLevel{model_name}.ckpt")
+    if os.path.isfile(pretrained_filename):
+        print("Found pretrained model, loading...")
+        model = NodeLevelGNN.load_from_checkpoint(pretrained_filename)
     else:
-        count+=1
-    if count >= Patience:
-        break
+        pl.seed_everything()
+        model = NodeLevelGNN(model_name=model_name, c_in=1280, c_out=58, **model_kwargs)
+        trainer.fit(model, graph_train_loader, graph_val_loader)
+        model = NodeLevelGNN.load_from_checkpoint(trainer.checkpoint_callback.best_model_path)
 
-    epoch_number += 1
+    train_result = trainer.test(model, dataloaders=graph_train_loader)#, verbose=False)
+    test_result = trainer.test(model, dataloaders=graph_test_loader)#, verbose=False)
+    result = {"test": test_result[0]["test_f1"], "train": train_result[0]["test_f1"]}
+    return model, result
+
+# Small function for printing the test scores
+def print_results(result_dict):
+    if "train" in result_dict:
+        print(f"Train f1: {(100.0*result_dict['train']):4.2f}%")
+    if "val" in result_dict:
+        print(f"Val f1:   {(100.0*result_dict['val']):4.2f}%")
+    print(f"Test f1:  {(100.0*result_dict['test']):4.2f}%")
+
+
+#%%
+def main():
+    node_gnn_model, node_gnn_result = train_node_classifier(model_name="GNNnode",
+                                                            layer_name="GAT",                                                      
+                                                            c_hidden=512,
+                                                            num_layers=2,
+                                                            edge_dim=16,
+                                                            dp_rate=0.1)
+    print_results(node_gnn_result)
+
+
+if __name__ == "__main__":
+    main()
 # %%
 
