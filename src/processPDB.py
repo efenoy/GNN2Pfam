@@ -1,10 +1,4 @@
 #%%
-##
-# sbatch -n 16 -N 1 -o /usr/users/efenoy/GNNproject/sbatchOutputs/runMergeData.out -t 20:00:00 runMergeData.sh
-# scancel #####
-##
-
-
 # IMPORTS
 # base imports
 import os
@@ -210,9 +204,9 @@ def PDBprocessor(indir, outdir, IDS):
 def main():
     #Data=pd.read_csv('/usr/users/efenoy/data/GraphData/MicroDataset.csv', index_col=0)
     print('Reading data')
-    Data=pd.read_csv('/usr/users/efenoy/data/idmapping_miniset_pairs.tsv', sep=' ', names=['UID','Alphafold'])
-    idir='/usr/users/efenoy/data/AFstructures/'
-    odir='/usr/users/efenoy/data/GraphData/'
+    Data=pd.read_csv('../data/idmapping_miniset_pairs.tsv', sep=' ', names=['UID','Alphafold'])
+    idir='../data/AFstructures/'
+    odir='../data/GraphData/'
 
     print('Starting processing')
     t=time.time()

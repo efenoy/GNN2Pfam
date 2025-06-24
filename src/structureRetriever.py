@@ -13,8 +13,8 @@ with open('../data/idmapping_miniset_pairs.tsv') as f:
     for line in lines:
         PID, UPID = line.split()
         PIDtoUPID[PID] = UPID
-TrainSet=pd.read_csv('../data/Miniset_train.csv', sep=',', names=['PID','Inicio', 'Fin', 'PF', 'Seed'], header=None)
-TestSet=pd.read_csv('../data/Miniset_test.csv', sep=',', names=['PID','Inicio', 'Fin', 'PF', 'Seed'], header=None)
+TrainSet=pd.read_csv('../data/Microset_train.csv', sep=',', names=['PID','Inicio', 'Fin', 'PF', 'Seed'], header=None)
+TestSet=pd.read_csv('../data/Microset_test.csv', sep=',', names=['PID','Inicio', 'Fin', 'PF', 'Seed'], header=None)
 
 def Retriever(r):
     if r.PID in PIDtoUPID.keys():

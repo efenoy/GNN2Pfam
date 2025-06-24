@@ -9,9 +9,9 @@ import pytorch_lightning as pl
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
 
 # Path to the folder where the datasets are/should be downloaded
-DATASET_PATH = "/usr/users/efenoy/data/GraphData/Dicts/CONS/"
+DATASET_PATH = "../data/GraphData/Dicts/CONS/"
 # Path to the folder where the pretrained models are saved
-CHECKPOINT_PATH = "/usr/users/efenoy/data/GraphData/saved_models/"
+CHECKPOINT_PATH = "../data/GraphData/saved_models/"
 
 # Setting the seed
 pl.seed_everything(42)
@@ -27,7 +27,7 @@ device = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("
 # device = torch.device("cpu")
 
 #import model
-from model import NodeLevelGNN
+from model import NodeLevelGNNCRF
 
 import warnings
 
@@ -63,12 +63,12 @@ def train_node_classifier(model_name, **model_kwargs):
     pretrained_filename = os.path.join(CHECKPOINT_PATH, f"NodeLevel{model_name}.ckpt")
     if os.path.isfile(pretrained_filename):
         print("Found pretrained model, loading...")
-        model = NodeLevelGNN.load_from_checkpoint(pretrained_filename)
+        model = NodeLevelGNNCRF.load_from_checkpoint(pretrained_filename)
     else:
         pl.seed_everything()
-        model = NodeLevelGNN(model_name=model_name, c_in=1280, c_out=58, **model_kwargs)
+        model = NodeLevelGNNCRF(model_name=model_name, c_in=1280, c_out=58, **model_kwargs)
         trainer.fit(model, graph_train_loader, graph_val_loader)
-        model = NodeLevelGNN.load_from_checkpoint(trainer.checkpoint_callback.best_model_path)
+        model = NodeLevelGNNCRF.load_from_checkpoint(trainer.checkpoint_callback.best_model_path)
 
     train_result = trainer.test(model, dataloaders=graph_train_loader)#, verbose=False)
     test_result = trainer.test(model, dataloaders=graph_test_loader)#, verbose=False)
