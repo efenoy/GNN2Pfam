@@ -202,16 +202,18 @@ def PDBprocessor(indir, outdir, IDS):
 
 #%%
 def main():
-    #Data=pd.read_csv('/usr/users/efenoy/data/GraphData/MicroDataset.csv', index_col=0)
     print('Reading data')
-    Data=pd.read_csv('../data/idmapping_miniset_pairs.tsv', sep=' ', names=['UID','Alphafold'])
+    Data=pd.read_csv('../data/MicroDataset.csv', index_col=0)
     idir='../data/AFstructures/'
     odir='../data/GraphData/'
-
+    
+    if not os.path.exists(odir):
+        os.makedirs(odir)
+    
     print('Starting processing')
     t=time.time()
-    #num_cores = multiprocessing.cpu_count()
-    Parallel(n_jobs=8)(delayed(PDBprocessor)(idir,odir, ids) for ids in tqdm(Data[["UID","Alphafold"]].values))
+    num_cores = multiprocessing.cpu_count()
+    Parallel(n_jobs=num_cores)(delayed(PDBprocessor)(idir, odir, ids) for ids in tqdm(Data[["UID","Alphafold"]].values))
     print(time.time()-t)
 
 if __name__ == "__main__":

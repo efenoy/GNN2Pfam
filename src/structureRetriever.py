@@ -7,26 +7,17 @@ import urllib.request
 from joblib import Parallel, delayed
 import multiprocessing
 
-PIDtoUPID = {}
-with open('../data/idmapping_miniset_pairs.tsv') as f:
-    lines = f.readlines()
-    for line in lines:
-        PID, UPID = line.split()
-        PIDtoUPID[PID] = UPID
-TrainSet=pd.read_csv('../data/Microset_train.csv', sep=',', names=['PID','Inicio', 'Fin', 'PF', 'Seed'], header=None)
-TestSet=pd.read_csv('../data/Microset_test.csv', sep=',', names=['PID','Inicio', 'Fin', 'PF', 'Seed'], header=None)
-
 def Retriever(r):
-    if r.PID in PIDtoUPID.keys():
-        if f'{PIDtoUPID[r.PID]}.pdb' not in os.listdir('../data/AFstructures'):
-            try:
-                urllib.request.urlretrieve(f'https://alphafold.ebi.ac.uk/files/AF-{PIDtoUPID[r.PID]}-F1-model_v4.pdb', f'../data/AFstructures/{PIDtoUPID[r.PID]}.pdb')
-            except:
-                pass
+    if f'{r['AlphaFold']}.pdb' not in os.listdir('../data/AFstructures'):
+        try:
+            urllib.request.urlretrieve(f'https://alphafold.ebi.ac.uk/files/AF-{r['AlphaFold']}-F1-model_v4.pdb', f'../data/AFstructures/{r['PID']}.pdb')
+        except:
+            pass
 # %%
 def main():
+    dataSet=pd.read_csv('../data/MicroDataset.csv', sep=',', names=['PID','Inicio','Fin','PF','Seed','Partition','UID','Alphafold'], header=None)
     num_cores = multiprocessing.cpu_count()
-    Parallel(n_jobs=num_cores)(delayed(Retriever)(info) for i,info in tqdm(TrainSet.iterrows()))
+    Parallel(n_jobs=num_cores)(delayed(Retriever)(info) for i,info in tqdm(dataSet.iterrows()))
 
 if __name__ == "__main__":
     main()
